@@ -79,7 +79,10 @@ jobs:
 
           Write-Host "Ermittle aktuelle DeepFilterNet Windows Datei..."
           $release = Invoke-RestMethod -Uri "https://api.github.com/repos/Rikorose/DeepFilterNet/releases/latest" -Headers @{ "User-Agent" = "novaphonic-build" }
-          $winAsset = $release.assets | Where-Object { $_.name -match "(?i)win" -and $_.name -match "(?i)deep-filter" } | Select-Object -First 1
+          # Bewusst "windows" statt nur "win" im Muster: "win" allein steckt zufaellig
+          # auch im Wort "darwin" (Apple macOS), das hatte vorher versehentlich die
+          # falsche, nicht-Windows-Datei ausgewaehlt.
+          $winAsset = $release.assets | Where-Object { $_.name -match "(?i)deep-filter-.*x86_64-pc-windows-msvc\.exe$" } | Select-Object -First 1
           if (-not $winAsset) {
             Write-Error "Kein passendes DeepFilterNet Windows Asset in der aktuellen Release gefunden. Bitte https://github.com/Rikorose/DeepFilterNet/releases manuell pruefen und diesen Schritt anpassen."
           }

@@ -21,7 +21,6 @@ Funktionen.
 app/               <- Oberfläche der Tauri App (HTML/CSS/JS)
 tauri-app/         <- Desktop App Gerüst (Windows Installer)
   BAUANLEITUNG.md   <- für alle, die NovaPhonic selbst aus dem Quellcode bauen wollen
-GITHUB_SETUP.md     <- für alle, die dieses Repository als Vorlage nutzen wollen
 ```
 
 ## Installation

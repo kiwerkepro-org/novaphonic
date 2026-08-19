@@ -119,7 +119,17 @@ jobs:
           projectPath: tauri-app
           tagName: ${{ github.ref_name }}
           releaseName: 'NovaPhonic ${{ github.ref_name }}'
-          releaseBody: 'Automatisch erstelltes Release. Enthält den Windows Installer sowie das Update Manifest für die In App Aktualisierung.'
+          # Bewusst kein fest eingetragener Text mehr: JJ hat am 2026-08-19
+          # festgelegt, dass die Release-Beschreibung immer den tatsächlichen
+          # Stand dokumentieren und nie ein alter, unveränderter Text sein
+          # darf. releaseBody liefert nur noch die kurze Einleitung, den
+          # eigentlichen Änderungs-Teil ("Änderungen in diesem Release")
+          # erzeugt GitHub selbst automatisch aus den Commits seit dem
+          # letzten Tag (generateReleaseNotes), dadurch ist die Beschreibung
+          # bei jedem künftigen Release automatisch aktuell, ohne dass hier
+          # manuell etwas nachgepflegt werden muss.
+          releaseBody: 'NovaPhonic ${{ github.ref_name }}. Enthält den Windows Installer sowie das Update Manifest für die In App Aktualisierung.'
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+          generateReleaseNotes: true

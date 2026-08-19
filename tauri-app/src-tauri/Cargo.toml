@@ -1,6 +1,6 @@
 [package]
 name = "novaphonic"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "NovaPhonic, ein Tool von KI-WERKE zum automatischen Videoschnitt und zur Audio Veredelung"
 

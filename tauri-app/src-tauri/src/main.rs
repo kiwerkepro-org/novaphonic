@@ -6,13 +6,16 @@
 // Dateipfade verarbeitet, nie Videoinhalte selbst in den Arbeitsspeicher der
 // Oberfläche geladen.
 //
-// Wichtiger Hinweis für den ersten echten Build: In dieser Entwicklungsumgebung
-// steht kein Rust Compiler zur Verfügung, dieser Code wurde also nicht kompiliert,
-// nur sorgfältig von Hand geprüft. Zwei Stellen bitte beim ersten Testlauf gezielt
-// gegenprüfen: 1) die genauen Kommandozeilen-Optionen von `deep-filter` (siehe
-// `deep-filter --help`, hier als `-o <Zieldatei>` angenommen), 2) ob `auto-editor`
-// den Flag `--no-open` in der installierten Version so kennt. Beides ist unten mit
-// Kommentaren markiert.
+// Alle Zwischenschritte (geschnittenes Video, rohe/entrauschte Tonspur, usw.)
+// laufen in einem echten temporären Systemordner (std::env::temp_dir()), nicht im
+// Ordner der Eingabedatei. Grund: Bei einem echten Testlauf am 2026-08-19 lag das
+// Eingabevideo in einem Nextcloud-synchronisierten Ordner, der Sync-Client hat
+// neu entstehende Zwischen-Dateien sofort selbst kurz geöffnet, was zu "Zugriff
+// verweigert" Fehlern führte, sobald NovaPhonic dieselbe Datei gleich danach
+// weiterverarbeiten wollte. Der temporäre Arbeitsordner wird bei einem Fehler
+// sofort wieder vollständig gelöscht, bei Erfolg bleibt nur das fertige Ergebnis
+// bis zum Speichern über den "Speichern unter" Dialog liegen, siehe
+// `save_output_as`, das räumt danach ebenfalls auf.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -47,9 +50,28 @@ fn save_output_as(source_path: String, suggested_name: String) -> Result<String,
         Some(dest) => {
             fs::copy(&source_path, &dest)
                 .map_err(|e| format!("Konnte Datei nicht speichern: {e}"))?;
+            cleanup_temp_work_dir(&source_path);
             Ok(dest.to_string_lossy().to_string())
         }
         None => Err("abgebrochen".to_string()),
+    }
+}
+
+// Löscht den temporären Arbeitsordner einer fertigen Ergebnisdatei, nachdem sie
+// erfolgreich an ihr endgültiges Ziel kopiert wurde. Sicherheitshalber nur, wenn
+// der Pfad wirklich im System-Temp-Ordner liegt und unserem eigenen Namensmuster
+// entspricht, damit hier niemals versehentlich ein echter Nutzerordner betroffen
+// sein kann.
+fn cleanup_temp_work_dir(source_path: &str) {
+    let path = PathBuf::from(source_path);
+    let Some(work_dir) = path.parent() else {
+        return;
+    };
+    let Some(folder_name) = work_dir.file_name().and_then(|n| n.to_str()) else {
+        return;
+    };
+    if work_dir.starts_with(std::env::temp_dir()) && folder_name.starts_with("novaphonic-") {
+        let _ = fs::remove_dir_all(work_dir);
     }
 }
 
@@ -186,13 +208,43 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
     let stem = input
         .file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("video");
-    let ext = input.extension().and_then(|s| s.to_str()).unwrap_or("mp4");
-    let parent = input.parent().unwrap_or_else(|| Path::new("."));
+        .unwrap_or("video")
+        .to_string();
+    let ext = input
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("mp4")
+        .to_string();
 
+    // Eigener, garantiert eindeutiger Arbeitsordner im System-Temp-Verzeichnis,
+    // pro Verarbeitungslauf neu, damit sich mehrere Läufe nie in die Quere kommen.
+    let work_dir =
+        std::env::temp_dir().join(format!("novaphonic-{stem}-{}", std::process::id()));
+    fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
+
+    match run_pipeline(&app, &options, &input, &work_dir, &stem, &ext).await {
+        Ok(final_path) => Ok(ProcessResult {
+            output_path: final_path.to_string_lossy().to_string(),
+        }),
+        Err(e) => {
+            // Bei einem Fehler bleibt nichts Halbfertiges im Temp-Ordner liegen.
+            let _ = fs::remove_dir_all(&work_dir);
+            Err(e)
+        }
+    }
+}
+
+async fn run_pipeline(
+    app: &AppHandle,
+    options: &ProcessOptions,
+    input: &Path,
+    work_dir: &Path,
+    stem: &str,
+    ext: &str,
+) -> Result<PathBuf, String> {
     // ---------- 1) Schnitt (auto-editor) ----------
-    emit_progress(&app, "cut", "running", Some("startet…".into()), None);
-    let cut_path = parent.join(format!("{stem}_geschnitten.{ext}"));
+    emit_progress(app, "cut", "running", Some("startet…".into()), None);
+    let cut_path = work_dir.join(format!("{stem}_geschnitten.{ext}"));
     let margin = format!("{}sec", options.margin_seconds);
     run_sidecar(
         &app,
@@ -222,8 +274,8 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
     // ---------- 2) Entrauschen (DeepFilterNet), optional ----------
     if options.denoise {
         emit_progress(&app, "denoise", "running", Some("startet…".into()), None);
-        let raw_audio = parent.join(format!("{stem}_audio.wav"));
-        let denoised_audio = parent.join(format!("{stem}_entrauscht.wav"));
+        let raw_audio = work_dir.join(format!("{stem}_audio.wav"));
+        let denoised_audio = work_dir.join(format!("{stem}_entrauscht.wav"));
 
         run_sidecar(
             &app,
@@ -254,7 +306,7 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
         // (per echtem Testlauf bestätigt, 2026-08-19). Deshalb erst in einen eigenen
         // Zwischenordner schreiben lassen und die entstandene Datei danach auf den
         // gewünschten Namen umbenennen.
-        let denoise_out_dir = parent.join(format!("{stem}_denoise_tmp"));
+        let denoise_out_dir = work_dir.join(format!("{stem}_denoise_tmp"));
         fs::create_dir_all(&denoise_out_dir).map_err(|e| e.to_string())?;
         run_sidecar(
             &app,
@@ -288,7 +340,7 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
             })?;
         let _ = fs::remove_dir_all(&denoise_out_dir);
 
-        let remuxed = parent.join(format!("{stem}_entrauscht_video.{ext}"));
+        let remuxed = work_dir.join(format!("{stem}_entrauscht_video.{ext}"));
         run_sidecar(
             &app,
             "ffmpeg",
@@ -325,7 +377,7 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
     }
 
     // ---------- 3) Lautstärke & Klangbalance (FFmpeg loudnorm), optional ----------
-    let final_path = parent.join(format!("{stem}_nova.{ext}"));
+    let final_path = work_dir.join(format!("{stem}_nova.{ext}"));
     if options.loudnorm {
         emit_progress(&app, "loudnorm", "running", Some("startet…".into()), None);
         // Bewusst Einzelpass-Loudnorm statt klassischem Zweipass-Verfahren: kein
@@ -361,9 +413,7 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
         emit_progress(&app, "loudnorm", "done", Some("übersprungen".into()), None);
     }
 
-    Ok(ProcessResult {
-        output_path: final_path.to_string_lossy().to_string(),
-    })
+    Ok(final_path)
 }
 
 fn main() {

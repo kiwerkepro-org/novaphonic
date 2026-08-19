@@ -4,3 +4,5 @@ tauri-app/src-tauri/gen/
 tauri-app/src-tauri/binaries/
 .DS_Store
 Thumbs.db
+
+NOVA-PHONIC_Setup_WhisperX_ROCm.md

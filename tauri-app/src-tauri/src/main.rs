@@ -53,10 +53,14 @@ fn save_output_as(source_path: String, suggested_name: String) -> Result<String,
     }
 }
 
+// Wichtig: Tauri spricht Sidecar Programme zur Laufzeit nur über ihren bloßen
+// Namen an (z.B. "auto-editor"), der Ordnerpfad "binaries/" wird ausschließlich
+// beim Einrichten in tauri.conf.json (externalBin) und in den Capabilities
+// verwendet, nicht beim eigentlichen Aufruf hier im Code.
 const SIDECARS: [(&str, &str); 3] = [
-    ("binaries/auto-editor", "--version"),
-    ("binaries/deep-filter", "--version"),
-    ("binaries/ffmpeg", "-version"),
+    ("auto-editor", "--version"),
+    ("deep-filter", "--version"),
+    ("ffmpeg", "-version"),
 ];
 
 #[tauri::command]
@@ -192,7 +196,7 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
     let margin = format!("{}sec", options.margin_seconds);
     run_sidecar(
         &app,
-        "binaries/auto-editor",
+        "auto-editor",
         vec![
             input.to_string_lossy().to_string(),
             "--margin".into(),
@@ -223,7 +227,7 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
 
         run_sidecar(
             &app,
-            "binaries/ffmpeg",
+            "ffmpeg",
             vec![
                 "-y".into(),
                 "-i".into(),
@@ -252,7 +256,7 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
         // ist, muss diese Stelle entsprechend angepasst werden.
         run_sidecar(
             &app,
-            "binaries/deep-filter",
+            "deep-filter",
             vec![
                 raw_audio.to_string_lossy().to_string(),
                 "-o".into(),
@@ -269,7 +273,7 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
         let remuxed = parent.join(format!("{stem}_entrauscht_video.{ext}"));
         run_sidecar(
             &app,
-            "binaries/ffmpeg",
+            "ffmpeg",
             vec![
                 "-y".into(),
                 "-i".into(),
@@ -313,7 +317,7 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
         let filter = format!("loudnorm=I={}:TP=-1.5:LRA=11", options.loudnorm_target);
         run_sidecar(
             &app,
-            "binaries/ffmpeg",
+            "ffmpeg",
             vec![
                 "-y".into(),
                 "-i".into(),

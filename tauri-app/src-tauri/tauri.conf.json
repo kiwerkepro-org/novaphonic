@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NovaPhonic",
+  "version": "0.1.0",
+  "identifier": "com.kiwerkepro.novaphonic",
+  "build": {
+    "frontendDist": "../../app"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "NovaPhonic, ein Tool von KI-WERKE",
+        "width": 1240,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 700,
+        "resizable": true,
+        "dragDropEnabled": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/auto-editor",
+      "binaries/deep-filter",
+      "binaries/ffmpeg"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["German"]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "BITTE_EIGENEN_MINISIGN_PUBLIC_KEY_EINSETZEN_SIEHE_BAUANLEITUNG",
+      "endpoints": [
+        "https://github.com/kiwerkepro-org/novaphonic/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

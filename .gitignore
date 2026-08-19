@@ -1,0 +1,6 @@
+tauri-app/node_modules/
+tauri-app/src-tauri/target/
+tauri-app/src-tauri/gen/
+tauri-app/src-tauri/binaries/
+.DS_Store
+Thumbs.db

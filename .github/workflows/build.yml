@@ -33,7 +33,7 @@ jobs:
 
       - name: Node Abhängigkeiten installieren
         working-directory: tauri-app
-        run: npm ci
+        run: npm install
 
       - name: Sidecar Werkzeuge herunterladen (auto-editor, DeepFilterNet, FFmpeg)
         shell: pwsh

@@ -257,6 +257,15 @@ async fn run_pipeline(
             // auto-editor Version noch so heißt (verhindert, dass sich nach dem
             // Schneiden automatisch ein Videoplayer öffnet).
             "--no-open".into(),
+            // Weicher Übergang statt hartem Jump Cut: auto-editor blendet Bild und
+            // Ton an jedem Schnittpunkt kurz ineinander (0,15s), statt hart zu
+            // schneiden. Die zweite Zahl (0,05s) sorgt dafür, dass auch sehr kurze
+            // Schnitte (z.B. ein einzelnes rausgeschnittenes Füllwort) noch eine
+            // Überblendung bekommen, auto-editor würde sonst nur Schnitte ab 1
+            // Sekunde Länge überblenden. Nutzerfeedback vom 2026-08-19: harte,
+            // unruhige Schnittpunkte im Bild.
+            "--transition".into(),
+            "dissolve:0.15:0.05".into(),
             "-o".into(),
             cut_path.to_string_lossy().to_string(),
         ],
@@ -313,6 +322,15 @@ async fn run_pipeline(
             "deep-filter",
             vec![
                 raw_audio.to_string_lossy().to_string(),
+                // Begrenzt, wie stark DeepFilterNet maximal absenken darf. Ohne
+                // dieses Limit greift das Modell an manchen Stellen so stark ein,
+                // dass mit dem Rauschen auch ein Teil der hohen Frequenzen der
+                // Stimme mit entfernt wird, das klingt dann dumpf und mattiert
+                // statt klar. Nutzerfeedback vom 2026-08-19: Klang zu dumpf im
+                // Vergleich zu Auphonic. 30 dB ist ein vorsichtiger Mittelweg,
+                // lässt sich bei Bedarf noch weiter anpassen.
+                "--atten-lim-db".into(),
+                "30".into(),
                 "-o".into(),
                 denoise_out_dir.to_string_lossy().to_string(),
             ],
@@ -376,7 +394,7 @@ async fn run_pipeline(
         emit_progress(&app, "denoise", "done", Some("übersprungen".into()), None);
     }
 
-    // ---------- 3) Lautstärke & Klangbalance (FFmpeg loudnorm), optional ----------
+    // ---------- 3) Klangveredelung & Lautstärke (FFmpeg), optional ----------
     let final_path = work_dir.join(format!("{stem}_nova.{ext}"));
     if options.loudnorm {
         emit_progress(&app, "loudnorm", "running", Some("startet…".into()), None);
@@ -384,7 +402,19 @@ async fn run_pipeline(
         // Parsen von FFmpeg Messwerten aus stderr nötig, dadurch robuster. Etwas
         // weniger präzise als Zweipass, für Sprachaufnahmen in der Praxis meist
         // ausreichend. Lässt sich als Ausbaustufe später nachrüsten.
-        let filter = format!("loudnorm=I={}:TP=-1.5:LRA=11", options.loudnorm_target);
+        //
+        // Vor loudnorm zusätzlich drei Klangschritte, weil reines loudnorm nur die
+        // Lautheit regelt, aber keine Klangfarbe: erst ein sanfter Low Shelf um
+        // 180 Hz, der das dumpfe, wummernde Volumen aus der Stimme nimmt, dann ein
+        // sanfter High Shelf ab 4000 Hz für mehr Klarheit und Präsenz (das war der
+        // Haupt-Unterschied zu Auphonic im Nutzerfeedback vom 2026-08-19), und ein
+        // leichter Kompressor, der die Stimme etwas durchsetzungsfähiger macht und
+        // kleine Lautstärkeschwankungen ausgleicht. Alle Werte bewusst moderat
+        // gewählt, um keine unnatürlichen oder metallischen Artefakte zu erzeugen.
+        let filter = format!(
+            "bass=frequency=180:gain=-4:width=0.7,treble=frequency=4000:gain=3.5:width=0.6,acompressor=threshold=0.1:ratio=2.5:attack=15:release=200:makeup=1.5,loudnorm=I={}:TP=-1.5:LRA=11",
+            options.loudnorm_target
+        );
         run_sidecar(
             &app,
             "ffmpeg",

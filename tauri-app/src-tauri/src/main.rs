@@ -249,18 +249,20 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
             e
         })?;
 
-        // Achtung, bitte gegen `deep-filter --help` prüfen: hier wird eine exakte
-        // Ausgabedatei per -o angenommen. Manche deep-filter Versionen erwarten
-        // stattdessen einen Ausgabeordner (z.B. -o <Ordner>), in dem eine Datei
-        // mit demselben Namen wie die Eingabe erzeugt wird. Falls das der Fall
-        // ist, muss diese Stelle entsprechend angepasst werden.
+        // deep-filter erwartet bei -o einen AusgabeORDNER, keine Zieldatei, und
+        // schreibt dort eine Datei mit demselben Namen wie die Eingabedatei hinein
+        // (per echtem Testlauf bestätigt, 2026-08-19). Deshalb erst in einen eigenen
+        // Zwischenordner schreiben lassen und die entstandene Datei danach auf den
+        // gewünschten Namen umbenennen.
+        let denoise_out_dir = parent.join(format!("{stem}_denoise_tmp"));
+        fs::create_dir_all(&denoise_out_dir).map_err(|e| e.to_string())?;
         run_sidecar(
             &app,
             "deep-filter",
             vec![
                 raw_audio.to_string_lossy().to_string(),
                 "-o".into(),
-                denoised_audio.to_string_lossy().to_string(),
+                denoise_out_dir.to_string_lossy().to_string(),
             ],
             "denoise",
         )
@@ -269,6 +271,22 @@ async fn process_video(app: AppHandle, options: ProcessOptions) -> Result<Proces
             emit_progress(&app, "denoise", "error", Some(e.clone()), None);
             e
         })?;
+        let denoise_result = denoise_out_dir.join(
+            raw_audio
+                .file_name()
+                .ok_or_else(|| "Ungültiger Audio Dateiname.".to_string())?,
+        );
+        fs::rename(&denoise_result, &denoised_audio)
+            .or_else(|_| fs::copy(&denoise_result, &denoised_audio).map(|_| ()))
+            .map_err(|e| {
+                let msg = format!(
+                    "Entrauschte Datei nicht am erwarteten Ort {} gefunden: {e}",
+                    denoise_result.display()
+                );
+                emit_progress(&app, "denoise", "error", Some(msg.clone()), None);
+                msg
+            })?;
+        let _ = fs::remove_dir_all(&denoise_out_dir);
 
         let remuxed = parent.join(format!("{stem}_entrauscht_video.{ext}"));
         run_sidecar(

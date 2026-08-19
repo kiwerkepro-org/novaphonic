@@ -242,50 +242,22 @@ async fn run_pipeline(
     stem: &str,
     ext: &str,
 ) -> Result<PathBuf, String> {
-    // ---------- 1) Schnitt (auto-editor) ----------
-    emit_progress(app, "cut", "running", Some("startet…".into()), None);
-    let cut_path = work_dir.join(format!("{stem}_geschnitten.{ext}"));
-    let margin = format!("{}sec", options.margin_seconds);
-    run_sidecar(
-        &app,
-        "auto-editor",
-        vec![
-            input.to_string_lossy().to_string(),
-            "--margin".into(),
-            margin,
-            // Bitte beim ersten Testlauf prüfen, ob dieses Flag in der installierten
-            // auto-editor Version noch so heißt (verhindert, dass sich nach dem
-            // Schneiden automatisch ein Videoplayer öffnet).
-            "--no-open".into(),
-            // Weicher Übergang statt hartem Jump Cut: auto-editor blendet Bild und
-            // Ton an jedem Schnittpunkt kurz ineinander (0,15s), statt hart zu
-            // schneiden. Die zweite Zahl (0,05s) sorgt dafür, dass auch sehr kurze
-            // Schnitte (z.B. ein einzelnes rausgeschnittenes Füllwort) noch eine
-            // Überblendung bekommen, auto-editor würde sonst nur Schnitte ab 1
-            // Sekunde Länge überblenden. Nutzerfeedback vom 2026-08-19: harte,
-            // unruhige Schnittpunkte im Bild. Wichtig: die Zeitangaben brauchen
-            // zwingend eine Einheit ("sec"), eine nackte Kommazahl wie "0.15"
-            // lehnt auto-editor mit "Time format expects an integer" ab (per
-            // echtem Testlauf am 2026-08-19 bestätigt).
-            "--transition".into(),
-            "dissolve:0.15sec:0.05sec".into(),
-            "-o".into(),
-            cut_path.to_string_lossy().to_string(),
-        ],
-        "cut",
-    )
-    .await
-    .map_err(|e| {
-        emit_progress(&app, "cut", "error", Some(e.clone()), None);
-        e
-    })?;
-    emit_progress(&app, "cut", "done", Some("fertig".into()), None);
-
-    let mut current = cut_path;
-
-    // ---------- 2) Entrauschen (DeepFilterNet), optional ----------
+    // ---------- 1) Entrauschen (DeepFilterNet), optional ----------
+    // Bewusst VOR dem Schnitt statt danach (bis 2026-08-19 war das andersherum):
+    // auto-editor erkennt Stille anhand einer festen Lautstärke-Schwelle
+    // (Standard ca. -28 dB). Enthält die Aufnahme ein leises, aber durchgehendes
+    // Hintergrundgeräusch (Raumbrummen, Lüfter), liegt das oft über dieser
+    // Schwelle, auto-editor findet dann an keiner Stelle echte Stille und
+    // schneidet nichts weg. Nutzerfeedback vom 2026-08-19: "Der Clip ist
+    // durchgehend ungeschnitten, die natürlichen Sprechpausen sind noch
+    // vollständig erhalten." Wenn DeepFilterNet das Hintergrundgeräusch schon
+    // vor dem Schnitt entfernt, bleibt an den Pausen echte digitale Stille
+    // übrig, und die Standard-Schwelle von auto-editor funktioniert wieder
+    // zuverlässig, auch bei künftigen Aufnahmen mit anderem Grundrauschen,
+    // ohne dass man die Schwelle manuell pro Video nachjustieren muss.
+    let mut current = input.to_path_buf();
     if options.denoise {
-        emit_progress(&app, "denoise", "running", Some("startet…".into()), None);
+        emit_progress(app, "denoise", "running", Some("startet…".into()), None);
         let raw_audio = work_dir.join(format!("{stem}_audio.wav"));
         let denoised_audio = work_dir.join(format!("{stem}_entrauscht.wav"));
 
@@ -390,12 +362,60 @@ async fn run_pipeline(
 
         let _ = fs::remove_file(&raw_audio);
         let _ = fs::remove_file(&denoised_audio);
-        let _ = fs::remove_file(&current);
         current = remuxed;
         emit_progress(&app, "denoise", "done", Some("fertig".into()), None);
     } else {
         emit_progress(&app, "denoise", "done", Some("übersprungen".into()), None);
     }
+
+    // ---------- 2) Schnitt (auto-editor) ----------
+    emit_progress(app, "cut", "running", Some("startet…".into()), None);
+    let cut_path = work_dir.join(format!("{stem}_geschnitten.{ext}"));
+    let margin = format!("{}sec", options.margin_seconds);
+    // Läuft jetzt auf `current`, also auf der schon entrauschten Datei (falls
+    // Entrauschen aktiv war) statt auf der Originaldatei, siehe Kommentar oben.
+    let cut_input = current.clone();
+    run_sidecar(
+        &app,
+        "auto-editor",
+        vec![
+            cut_input.to_string_lossy().to_string(),
+            "--margin".into(),
+            margin,
+            // Bitte beim ersten Testlauf prüfen, ob dieses Flag in der installierten
+            // auto-editor Version noch so heißt (verhindert, dass sich nach dem
+            // Schneiden automatisch ein Videoplayer öffnet).
+            "--no-open".into(),
+            // Weicher Übergang statt hartem Jump Cut: auto-editor blendet Bild und
+            // Ton an jedem Schnittpunkt kurz ineinander (0,15s), statt hart zu
+            // schneiden. Die zweite Zahl (0,05s) sorgt dafür, dass auch sehr kurze
+            // Schnitte (z.B. ein einzelnes rausgeschnittenes Füllwort) noch eine
+            // Überblendung bekommen, auto-editor würde sonst nur Schnitte ab 1
+            // Sekunde Länge überblenden. Nutzerfeedback vom 2026-08-19: harte,
+            // unruhige Schnittpunkte im Bild. Wichtig: die Zeitangaben brauchen
+            // zwingend eine Einheit ("sec"), eine nackte Kommazahl wie "0.15"
+            // lehnt auto-editor mit "Time format expects an integer" ab (per
+            // echtem Testlauf am 2026-08-19 bestätigt).
+            "--transition".into(),
+            "dissolve:0.15sec:0.05sec".into(),
+            "-o".into(),
+            cut_path.to_string_lossy().to_string(),
+        ],
+        "cut",
+    )
+    .await
+    .map_err(|e| {
+        emit_progress(&app, "cut", "error", Some(e.clone()), None);
+        e
+    })?;
+    // Zwischenergebnis aus Schritt 1 aufräumen, aber niemals die Originaldatei
+    // des Nutzers löschen (die liegt außerhalb des Temp-Ordners, falls
+    // Entrauschen deaktiviert war und `cut_input` noch auf sie zeigt).
+    if cut_input.as_path() != input {
+        let _ = fs::remove_file(&cut_input);
+    }
+    current = cut_path;
+    emit_progress(&app, "cut", "done", Some("fertig".into()), None);
 
     // ---------- 3) Klangveredelung & Lautstärke (FFmpeg), optional ----------
     let final_path = work_dir.join(format!("{stem}_nova.{ext}"));
@@ -406,16 +426,23 @@ async fn run_pipeline(
         // weniger präzise als Zweipass, für Sprachaufnahmen in der Praxis meist
         // ausreichend. Lässt sich als Ausbaustufe später nachrüsten.
         //
-        // Vor loudnorm zusätzlich drei Klangschritte, weil reines loudnorm nur die
-        // Lautheit regelt, aber keine Klangfarbe: erst ein sanfter Low Shelf um
-        // 180 Hz, der das dumpfe, wummernde Volumen aus der Stimme nimmt, dann ein
-        // sanfter High Shelf ab 4000 Hz für mehr Klarheit und Präsenz (das war der
-        // Haupt-Unterschied zu Auphonic im Nutzerfeedback vom 2026-08-19), und ein
-        // leichter Kompressor, der die Stimme etwas durchsetzungsfähiger macht und
-        // kleine Lautstärkeschwankungen ausgleicht. Alle Werte bewusst moderat
-        // gewählt, um keine unnatürlichen oder metallischen Artefakte zu erzeugen.
+        // Vor loudnorm zusätzlich vier Klangschritte, weil reines loudnorm nur die
+        // Lautheit regelt, aber keine Klangfarbe. Stand 2026-08-19, zweite
+        // Nachschärfung: nach dem ersten Versuch (Low/High Shelf) war der Klang
+        // laut Nutzerfeedback immer noch "bassbetont und im mittleren Bereich
+        // etwas topfig". Deshalb jetzt: 1) echter Hochpassfilter bei 90 Hz statt
+        // eines sanften Shelfs, entfernt Trittschall/Dröhnen konsequenter (Wert
+        // stammt aus einer externen Analyse-Empfehlung, die JJ eingeholt hat).
+        // 2) gezielte, moderate Absenkung um 350 Hz, genau der Bereich, der für
+        // den "topfigen" Klang bei nah sitzenden Lavaliermikrofonen typisch ist,
+        // das hatte die externe Empfehlung noch nicht abgedeckt. 3) ein
+        // schmalerer Presence Boost um 3500 Hz statt eines breiten High Shelf ab
+        // 4000 Hz, wirkt natürlicher (ebenfalls aus der externen Empfehlung
+        // übernommen). 4) unveränderter, leichter Kompressor für gleichmäßigere
+        // Aussteuerung. Alle Werte bewusst moderat, um keine unnatürlichen oder
+        // metallischen Artefakte zu erzeugen.
         let filter = format!(
-            "bass=frequency=180:gain=-4:width=0.7,treble=frequency=4000:gain=3.5:width=0.6,acompressor=threshold=0.1:ratio=2.5:attack=15:release=200:makeup=1.5,loudnorm=I={}:TP=-1.5:LRA=11",
+            "highpass=f=90,equalizer=f=350:t=q:w=1.5:g=-3,equalizer=f=3500:t=q:w=1.2:g=3.5,acompressor=threshold=0.1:ratio=2.5:attack=15:release=200:makeup=1.5,loudnorm=I={}:TP=-1.5:LRA=11",
             options.loudnorm_target
         );
         run_sidecar(

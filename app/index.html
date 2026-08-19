@@ -87,9 +87,10 @@
         <h2>Über die Werkzeuge</h2>
         <div class="hint-small">
           Schnitt: <strong>auto-editor</strong> (Public Domain). Entrauschen:
-          <strong>DeepFilterNet</strong> (MIT/Apache 2.0). Lautstärke: <strong>FFmpeg</strong>
-          loudnorm Filter (LGPL/GPL). Alle drei laufen als eigenständige Programme neben
-          NovaPhonic auf diesem Rechner, keines davon braucht eine Grafikkarte.
+          <strong>DeepFilterNet</strong> (MIT/Apache 2.0). Klangveredelung &amp;
+          Lautstärke: <strong>FFmpeg</strong> (EQ, Kompressor, loudnorm Filter, LGPL/GPL).
+          Alle drei laufen als eigenständige Programme neben NovaPhonic auf diesem
+          Rechner, keines davon braucht eine Grafikkarte.
         </div>
       </div>
     </div>
@@ -124,19 +125,19 @@
       <div class="panel">
         <h2>Ablauf</h2>
         <div class="pipeline-steps">
-          <div class="pipeline-step" id="step-cut">
-            <span class="ps-dot"></span>
-            <span class="ps-label">Füllwörter &amp; Stille schneiden</span>
-            <span class="ps-detail" id="step-cut-detail"></span>
-          </div>
           <div class="pipeline-step" id="step-denoise">
             <span class="ps-dot"></span>
             <span class="ps-label">Rauschen entfernen</span>
             <span class="ps-detail" id="step-denoise-detail"></span>
           </div>
+          <div class="pipeline-step" id="step-cut">
+            <span class="ps-dot"></span>
+            <span class="ps-label">Füllwörter &amp; Stille schneiden</span>
+            <span class="ps-detail" id="step-cut-detail"></span>
+          </div>
           <div class="pipeline-step" id="step-loudnorm">
             <span class="ps-dot"></span>
-            <span class="ps-label">Lautstärke angleichen</span>
+            <span class="ps-label">Klang veredeln &amp; Lautstärke angleichen</span>
             <span class="ps-detail" id="step-loudnorm-detail"></span>
           </div>
         </div>

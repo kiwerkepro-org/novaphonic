@@ -149,7 +149,7 @@
   syncLoudnormOptions();
 
   // ---------- Pipeline Ablauf ----------
-  const STEP_IDS = ['cut', 'denoise', 'loudnorm'];
+  const STEP_IDS = ['denoise', 'cut', 'loudnorm'];
 
   function resetSteps() {
     for (const id of STEP_IDS) {

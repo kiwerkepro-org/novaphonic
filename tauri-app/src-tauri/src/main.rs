@@ -263,9 +263,12 @@ async fn run_pipeline(
             // Schnitte (z.B. ein einzelnes rausgeschnittenes Füllwort) noch eine
             // Überblendung bekommen, auto-editor würde sonst nur Schnitte ab 1
             // Sekunde Länge überblenden. Nutzerfeedback vom 2026-08-19: harte,
-            // unruhige Schnittpunkte im Bild.
+            // unruhige Schnittpunkte im Bild. Wichtig: die Zeitangaben brauchen
+            // zwingend eine Einheit ("sec"), eine nackte Kommazahl wie "0.15"
+            // lehnt auto-editor mit "Time format expects an integer" ab (per
+            // echtem Testlauf am 2026-08-19 bestätigt).
             "--transition".into(),
-            "dissolve:0.15:0.05".into(),
+            "dissolve:0.15sec:0.05sec".into(),
             "-o".into(),
             cut_path.to_string_lossy().to_string(),
         ],

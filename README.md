@@ -15,14 +15,6 @@ Funktionen.
 > mitreden möchte: die
 > [KIW Schmiede Community auf Skool](https://www.skool.com/kiw-schmiede-9100)
 
-## Ordnerstruktur
-
-```
-app/               <- Oberfläche der Tauri App (HTML/CSS/JS)
-tauri-app/         <- Desktop App Gerüst (Windows Installer)
-  BAUANLEITUNG.md   <- für alle, die NovaPhonic selbst aus dem Quellcode bauen wollen
-```
-
 ## Installation
 
 1. Auf der [Releases Seite](https://github.com/kiwerkepro-org/novaphonic/releases)

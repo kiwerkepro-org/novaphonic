@@ -44,7 +44,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "BITTE_EIGENEN_MINISIGN_PUBLIC_KEY_EINSETZEN_SIEHE_BAUANLEITUNG",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMxOUJBODQxRTFFMzNFRjcKUldUM1B1UGhRYWliTVIySHBRUno3R2NvSC9SV2hzV1BXVFp3Rit5eThhSVBvdmxJM1k3ZzBLV1oK",
       "endpoints": [
         "https://github.com/kiwerkepro-org/novaphonic/releases/latest/download/latest.json"
       ]

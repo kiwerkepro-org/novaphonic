@@ -331,15 +331,12 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .privacy-note strong { color: var(--accent-text); }
 
 .tool-warning {
-  font-size: 13px;
-  background: var(--danger-bg);
-  border: 1px solid var(--danger);
-  color: var(--text);
-  padding: 10px 12px;
-  border-radius: 10px;
-  margin-bottom: 18px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-top: 10px;
 }
-.tool-warning strong { color: var(--danger); }
+.tool-warning strong { color: var(--danger); font-weight: 600; }
 
 .update-banner {
   display: flex;

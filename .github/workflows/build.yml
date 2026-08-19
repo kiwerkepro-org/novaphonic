@@ -43,15 +43,39 @@ jobs:
           New-Item -ItemType Directory -Force -Path $binDir | Out-Null
           $triple = "x86_64-pc-windows-msvc"
 
+          # Prueft, dass eine heruntergeladene Datei tatsaechlich ein echtes Windows
+          # Programm ist, statt z.B. einer kleinen, fehlgeschlagenen Downloadantwort
+          # (Fehlerseite, abgebrochene Uebertragung), die sonst unbemerkt als exe
+          # eingepackt wuerde und erst beim Nutzer mit "os error" fehlschlaegt.
+          function Assert-ValidExe($path) {
+            if (-not (Test-Path $path)) {
+              Write-Error "$path wurde nicht angelegt, Download ist fehlgeschlagen."
+            }
+            $size = (Get-Item $path).Length
+            if ($size -lt 1MB) {
+              Write-Error "$path ist mit $size Bytes verdaechtig klein fuer ein echtes Programm, vermutlich ist beim Download eine Fehlerseite statt der Datei angekommen. Abgebrochen, bevor eine kaputte Datei eingepackt wird."
+            }
+            $stream = [System.IO.File]::OpenRead($path)
+            $header = New-Object byte[] 2
+            $stream.Read($header, 0, 2) | Out-Null
+            $stream.Close()
+            if ($header[0] -ne 0x4D -or $header[1] -ne 0x5A) {
+              Write-Error "$path beginnt nicht mit der erwarteten MZ Kennung einer Windows exe Datei, vermutlich keine echte ausfuehrbare Datei."
+            }
+            Write-Host "  $path geprueft, $size Bytes, gueltige exe Kennung."
+          }
+
           Write-Host "Lade auto-editor..."
           Invoke-WebRequest -Uri "https://github.com/WyattBlue/auto-editor/releases/latest/download/auto-editor-windows-x86_64.exe" `
             -OutFile "$binDir/auto-editor-$triple.exe"
+          Assert-ValidExe "$binDir/auto-editor-$triple.exe"
 
           Write-Host "Lade FFmpeg (gyan.dev essentials build)..."
           Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "ffmpeg.zip"
           Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg-extracted"
           $ffmpegExe = Get-ChildItem -Path "ffmpeg-extracted" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
           Copy-Item $ffmpegExe.FullName "$binDir/ffmpeg-$triple.exe"
+          Assert-ValidExe "$binDir/ffmpeg-$triple.exe"
 
           Write-Host "Ermittle aktuelle DeepFilterNet Windows Datei..."
           $release = Invoke-RestMethod -Uri "https://api.github.com/repos/Rikorose/DeepFilterNet/releases/latest" -Headers @{ "User-Agent" = "novaphonic-build" }
@@ -60,7 +84,7 @@ jobs:
             Write-Error "Kein passendes DeepFilterNet Windows Asset in der aktuellen Release gefunden. Bitte https://github.com/Rikorose/DeepFilterNet/releases manuell pruefen und diesen Schritt anpassen."
           }
           Write-Host "Gefunden: $($winAsset.name)"
-          Invoke-WebRequest -Uri $winAsset.browser_download_url -OutFile "deepfilter-download"
+          Invoke-WebRequest -Uri $winAsset.browser_download_url -OutFile "deepfilter-download" -Headers @{ "User-Agent" = "novaphonic-build" }
           if ($winAsset.name -match "\.zip$") {
             Expand-Archive -Path "deepfilter-download" -DestinationPath "deepfilter-extracted"
             $dfExe = Get-ChildItem -Path "deepfilter-extracted" -Recurse -Filter "*.exe" | Select-Object -First 1
@@ -68,6 +92,7 @@ jobs:
           } else {
             Copy-Item "deepfilter-download" "$binDir/deep-filter-$triple.exe"
           }
+          Assert-ValidExe "$binDir/deep-filter-$triple.exe"
 
       - name: Nur bauen, kein Release (normaler Push ohne Versions-Tag)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}

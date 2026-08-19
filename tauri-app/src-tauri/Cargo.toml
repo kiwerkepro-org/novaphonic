@@ -1,6 +1,6 @@
 [package]
 name = "novaphonic"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "NovaPhonic, ein Tool von KI-WERKE zum automatischen Videoschnitt und zur Audio Veredelung"
 
@@ -19,3 +19,4 @@ tauri-plugin-shell = "2"
 [[bin]]
 name = "novaphonic"
 path = "src/main.rs"
+
